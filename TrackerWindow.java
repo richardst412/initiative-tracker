@@ -82,6 +82,8 @@ public class TrackerWindow
 	 */
 	protected void createContents()
 	{
+		
+		System.out.println(this.getClass().getCanonicalName());
 		// Initial window size
 		final int SHELL_WIDTH = 800;
 		final int SHELL_HEIGHT = 600;
