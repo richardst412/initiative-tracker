@@ -5,7 +5,7 @@
  * Made with D&D 5th Edition in mind, but can be used and/or modified for other games.
  * 
  * Turn order is displayed as a table, with each item (row) its own creature with a name,
- * an initiative score, an initiative modifier, an HP value, and an armor class.
+ * an initiative score, an initiative modifier, max/current HP values, and an armor class.
  * 
  * User can add and remove creatures, sort creatures based on initiative scores (and breaking
  * ties accordingly), and manually sort and move creatures.
@@ -36,6 +36,8 @@ import org.eclipse.swt.widgets.TableColumn;
 import org.eclipse.swt.widgets.TableItem;
 import org.eclipse.swt.widgets.Text;
 
+import java.util.ArrayList;
+
 import org.eclipse.jface.dialogs.IInputValidator;
 import org.eclipse.jface.dialogs.InputDialog;
 import org.eclipse.jface.window.Window;
@@ -44,6 +46,17 @@ public class TrackerWindow
 {
 
 	protected Shell shell;
+	
+	// Specifies whether to check or uncheck all items when clicking the name column header
+	private boolean checkAll;
+	
+	// Specify which columns contain which data using constants
+	final int NAME = 0;
+	final int INIT = 1;
+	final int MOD = 2;
+	final int HP_CURRENT = 3;
+	final int HP_MAX = 4;
+	final int AC = 5;
 
 	/**
 	 * Launch the application.
@@ -83,13 +96,14 @@ public class TrackerWindow
 	protected void createContents()
 	{
 		
-		System.out.println(this.getClass().getCanonicalName());
 		// Initial window size
-		final int SHELL_WIDTH = 800;
+		final int SHELL_WIDTH = 1000;
 		final int SHELL_HEIGHT = 600;
 		
 		// Number of columns in the grid layout
 		final int NUM_GRID_COLS = 8;
+		
+		checkAll = true;
 		
 		shell = new Shell();
 		shell.setText("D&D 5E Initiative Tracker");
@@ -99,10 +113,13 @@ public class TrackerWindow
 		
 		shell.setLayout(shellLayout);
 		
-		Table table = new Table(shell, SWT.FULL_SELECTION | SWT.V_SCROLL | SWT.H_SCROLL);
+		Table table = new Table(shell, SWT.CHECK | SWT.FULL_SELECTION | SWT.V_SCROLL | SWT.H_SCROLL);
 
 		// Creates table with columns initialized
 		fillTable(table, NUM_GRID_COLS);
+		
+		// Creates the buttons that appear along the bottom of the shell
+		createButtons(table, NUM_GRID_COLS);
 		
 		// Resizes columns when shell is resized
 		shell.addListener(SWT.Resize, new Listener()
@@ -118,13 +135,15 @@ public class TrackerWindow
 				});
 		
 
-		shell.setSize(SHELL_WIDTH, SHELL_HEIGHT);
 
 		// Allows table cells to be edited by clicking
 		enableEditingOfTable(table);
 		
-		// Creates the buttons that appear along the bottom of the shell
-		createButtons(table, NUM_GRID_COLS);
+		// Workaround to properly size the table
+		// TODO Find a more elegant solution to this
+		shell.setSize(SHELL_WIDTH+1, SHELL_HEIGHT);
+		shell.setSize(SHELL_WIDTH, SHELL_HEIGHT);
+		
 		
 	}
 	
@@ -138,7 +157,8 @@ public class TrackerWindow
 		tableData.horizontalAlignment = GridData.FILL;
 		tableData.verticalAlignment = GridData.FILL;
 		
-		tableData.horizontalSpan = gridCols;
+		tableData.horizontalSpan = gridCols - 2;
+		tableData.verticalSpan = 8;
 		
 		tableData.grabExcessHorizontalSpace = true;
 		tableData.grabExcessVerticalSpace = true;
@@ -152,34 +172,42 @@ public class TrackerWindow
 	private void initColumns(Table table)
 	{
 		TableColumn column;
-		final int NUM_COLS = 5;
-		final int COLUMN_WIDTH = (table.getClientArea().width) / NUM_COLS;
 		
 		column = new TableColumn(table, SWT.NULL);
-		column.setWidth(COLUMN_WIDTH);
 		column.setText("Name");
 		
+		column.addListener(SWT.Selection, new Listener()
+				{
+					public void handleEvent(Event e)
+					{
+						for (TableItem item : table.getItems())
+						{
+							item.setChecked(checkAll);
+						}
+						checkAll = !checkAll;
+					}
+				});
+		
 		column = new TableColumn(table, SWT.NULL);
-		column.setWidth(COLUMN_WIDTH);
 		column.setText("Initiative");
 		
 		column = new TableColumn(table, SWT.NULL);
-		column.setWidth(COLUMN_WIDTH);
 		column.setText("Initiave Mod");
 		
 		column = new TableColumn(table, SWT.NULL);
-		column.setWidth(COLUMN_WIDTH);
-		column.setText("HP");
+		column.setText("Current HP");
 		
 		column = new TableColumn(table, SWT.NULL);
-		column.setWidth(COLUMN_WIDTH);
-		column.setText("AC");
+		column.setText("Max HP");
+		
+		column = new TableColumn(table, SWT.NULL);
+		column.setText("Armor Class");
 		
 	}
 	
 	// Add new item to the table, prompting user via dialog boxes for creature info
 	// Checks that user-entered info is valid numerical value when appropriate
-	private void createNewItem(Table table)
+	private void createNewItem(Table table, int numItems)
 	{
 		String name, init, mod, HP, AC;
 		NewCreatureDialog dialog;
@@ -195,7 +223,7 @@ public class TrackerWindow
 		
 		name = dialog.getCreatureData();
 		
-		dialog = new NewCreatureDialog(shell, "New Creature", "Enter initiative roll of new creature.", null, null);
+		dialog = new NewCreatureDialog(shell, "New Creature", "Enter initiative roll of new creature (or leave blank for rolling later).", null, null);
 		do
 		{
 			if (dialog.open() == Window.CANCEL)
@@ -203,9 +231,9 @@ public class TrackerWindow
 	
 			init = dialog.getCreatureData();
 			
-			if (!isValidForNumericField(init))
+			if (!isValidForNumericField(init) && init != "")
 				invalidNumberBox.open();
-		} while (!isValidForNumericField(init));
+		} while (!isValidForNumericField(init) && init != "");
 		
 		
 		dialog = new NewCreatureDialog(shell, "New Creature", "Enter initiative modifier of new creature.", null, null);
@@ -220,7 +248,7 @@ public class TrackerWindow
 				invalidNumberBox.open();
 		} while (!isValidForNumericField(mod));
 		
-		dialog = new NewCreatureDialog(shell, "New Creature", "Enter HP of new creature.", null, null);
+		dialog = new NewCreatureDialog(shell, "New Creature", "Enter MAXIMUM hitpoints of new creature.", null, null);
 		do
 		{
 			if (dialog.open() == Window.CANCEL)
@@ -244,13 +272,23 @@ public class TrackerWindow
 				invalidNumberBox.open();
 		} while (!isValidForNumericField(AC));
 		
+		addItemWithData(table, name, init, mod, HP, AC);
+		
+		for (int i = 2; i <= numItems; i++)
+			addItemWithData(table, name + " " + i, init, mod, HP, AC);
+
+	}
+	
+	private void addItemWithData(Table table, String newName, String newInit, String newMod, String newHP, String newAC)
+	{
 
 		TableItem newItem = new TableItem(table, SWT.NULL);
-		newItem.setText(0, name);
-		newItem.setText(1, init);
-		newItem.setText(2, mod);
-		newItem.setText(3, HP);
-		newItem.setText(4, AC);
+		newItem.setText(NAME, newName);
+		newItem.setText(INIT, newInit);
+		newItem.setText(MOD, newMod);
+		newItem.setText(HP_CURRENT, newHP);
+		newItem.setText(HP_MAX, newHP);
+		newItem.setText(AC, newAC);
 	}
 	
 	// Returns true if String s follows the patterns of number of any length,
@@ -276,11 +314,12 @@ public class TrackerWindow
 	}
 	
 	// Fills empty space with a number of empty labels
-	private void fillEmptySpace(int numLabels)
+	private void fillEmptySpace(int numLabels, boolean grabHorizontal, boolean grabVertical)
 	{
 		GridData labelData = new GridData();
 		
-		labelData.grabExcessHorizontalSpace = true;
+		labelData.grabExcessHorizontalSpace = grabHorizontal;
+		labelData.grabExcessVerticalSpace = grabVertical;
 		
 		for (int i = 0; i < numLabels; i++)
 		{
@@ -314,8 +353,15 @@ public class TrackerWindow
 		{
 			currentItem = table.getItem(i);
 			
-			initCurrent = Integer.parseInt(currentItem.getText(1));
-			initMax = Integer.parseInt(maxItem.getText(1));
+			if (currentItem.getText(1) == "")
+				initCurrent = Integer.MIN_VALUE;
+			else
+				initCurrent = Integer.parseInt(currentItem.getText(1));
+			
+			if (maxItem.getText(1) == "")
+				initMax = Integer.MIN_VALUE;
+			else
+				initMax = Integer.parseInt(maxItem.getText(1));
 			
 			// init ties are broken by init mod
 			if (initCurrent == initMax)
@@ -367,6 +413,7 @@ public class TrackerWindow
 					
 					// The area of the cell currently being checked
 					Rectangle itemBounds = currentItem.getBounds(i);
+					int quarterWidth = itemBounds.width / 4;
 					
 					// Set the bounds to the area of the text, not the cell
 					GC gc = new GC(Display.getDefault());
@@ -374,12 +421,15 @@ public class TrackerWindow
 					FontMetrics fm = gc.getFontMetrics();
 					itemBounds.width = fm.getAverageCharWidth() * currentItem.getText(i).length();
 					
+					// If the bounds are so small that it's hard to click,
+					// make it a bit bigger (25% of the cell width)
+					if (itemBounds.width < quarterWidth)
+						itemBounds.width = quarterWidth;
+					
 					// If the point that was clicked is inside the item bounds,
 					// currentItem is the item that has been clicked.
 					if (itemBounds.contains(pt))
 					{
-						System.out.println("Clicked item " + index + " in column " + i);
-						
 						final int colSelected = i;
 						
 						// Place an editable text box over the box that was clicked
@@ -434,87 +484,20 @@ public class TrackerWindow
 		});
 	}
 	
-	// Creates and adds listeners for all buttons in the shell.
-	private void createButtons(Table table, int numGridCols)
+	private void createUpButton(Table table, int numGridCols)
 	{
-		GridData buttonData = new GridData();
-		buttonData.horizontalAlignment = GridData.FILL;
-		buttonData.horizontalSpan = numGridCols / 4;
-		buttonData.grabExcessHorizontalSpace = true;
-		
-		Button addButton = new Button(shell, SWT.NONE);
-		addButton.setText("Add Creature");
-		addButton.setLayoutData(buttonData);
-		
-		addButton.addListener(SWT.Selection, new Listener()
-				{
-
-					@Override
-					public void handleEvent(Event e)
-					{
-						createNewItem(table);
-					}
-					
-				});
-		
-		Button removeButton = new Button(shell, SWT.NONE);
-		removeButton.setText("Remove Creature");
-		removeButton.setLayoutData(buttonData);
-		
-		removeButton.addListener(SWT.Selection, new Listener()
-				{
-					public void handleEvent(Event e)
-					{
-						int selectedIndex = table.getSelectionIndex();
-						
-						if (selectedIndex >= 0)
-						{
-							MessageBox confMessageBox = new MessageBox(shell, SWT.ICON_WARNING | SWT.YES | SWT.NO);
-							confMessageBox.setText("Remove Creature");
-							confMessageBox.setMessage("Are you sure you want to remove "
-									+ table.getItem(selectedIndex).getText(0)
-									 + " from the initiative tracker?");
-							
-							if (confMessageBox.open() == SWT.YES)
-								table.remove(selectedIndex);
-						}
-					}
-				});
-		
-
-		buttonData = new GridData();
-		buttonData.horizontalAlignment = GridData.FILL;
-		buttonData.horizontalSpan = numGridCols / 8;
-		buttonData.grabExcessHorizontalSpace = true;
-		
-		Button sortButton = new Button(shell, SWT.NONE);
-		sortButton.setText("Sort");
-		sortButton.setLayoutData(buttonData);
-		
-		sortButton.addListener(SWT.Selection, new Listener()
-				{
-
-					@Override
-					public void handleEvent(Event arg0) {
-						sortTableByInitColumn(table);
-						
-					}
-					
-				});
-		
-		fillEmptySpace(1);
-		
 		GridData upButtonData = new GridData();
 		upButtonData.horizontalAlignment = GridData.FILL;
+		upButtonData.verticalAlignment = GridData.FILL;
 		upButtonData.horizontalSpan = numGridCols / 8;
+		upButtonData.verticalSpan = 4;
+		upButtonData.grabExcessVerticalSpace = true;
+		upButtonData.widthHint = 30;
 		
 		Button upButton = new Button(shell, SWT.NONE);
-		Button downButton = new Button(shell, SWT.NONE);
-		upButton.setText("Move Up");
-		downButton.setText("Move Down");
-		
+		upButton.setText("^");
+		upButton.setToolTipText("Shift selected creature one row up");
 		upButton.setLayoutData(upButtonData);
-		downButton.setLayoutData(upButtonData);
 		
 		upButton.addListener(SWT.Selection, new Listener()
 				{
@@ -528,7 +511,23 @@ public class TrackerWindow
 						table.setSelection(selectedIndex - 1);
 					}
 				});
+	}
+	
+	private void createDownButton (Table table, int numGridCols)
+	{
+Button downButton = new Button(shell, SWT.NONE);
 		
+		GridData downButtonData = new GridData();
+		downButtonData.horizontalAlignment = GridData.FILL;
+		downButtonData.verticalAlignment = GridData.FILL;
+		downButtonData.horizontalSpan = numGridCols / 8;
+		downButtonData.verticalSpan = 4;
+		downButtonData.grabExcessVerticalSpace = true;
+		downButtonData.widthHint = 30;
+		
+		downButton.setText("v");
+		downButton.setToolTipText("Shift selected creature one row down");
+		downButton.setLayoutData(downButtonData);
 		downButton.addListener(SWT.Selection, new Listener()
 				{
 					public void handleEvent(Event e)
@@ -541,6 +540,225 @@ public class TrackerWindow
 						table.setSelection(selectedIndex + 1);
 					}
 				});
+	}
+	
+	private void createAddButton(Table table, int numGridCols)
+	{
+		GridData buttonData = new GridData();
+		buttonData.horizontalAlignment = GridData.FILL;
+		buttonData.horizontalSpan = numGridCols / 8;
+		buttonData.widthHint = 200;
+		
+		Button addButton = new Button(shell, SWT.NONE);
+		addButton.setText("Add Creature");
+		addButton.setToolTipText("Add new creature to the tracker");
+		addButton.setLayoutData(buttonData);
+		
+		addButton.addListener(SWT.Selection, new Listener()
+				{
+
+					@Override
+					public void handleEvent(Event e)
+					{
+						createNewItem(table, 1);
+					}
+					
+				});
+	}
+	
+	// the "Add Creature Clones" button allows the user to add multiple instances of the same creature
+	private void createAddMultButton(Table table, int numGridCols)
+	{
+		GridData buttonData = new GridData();
+		buttonData.horizontalAlignment = GridData.FILL;
+		buttonData.horizontalSpan = numGridCols / 8;
+		buttonData.widthHint = 200;
+		
+		Button addMultButton = new Button(shell, SWT.NONE);
+		addMultButton.setText("Add Creature Copies");
+		addMultButton.setToolTipText("Add multiple copies of the same creature with the same stats");
+		addMultButton.setLayoutData(buttonData);
+		
+		addMultButton.addListener(SWT.Selection, new Listener()
+				{
+					public void handleEvent(Event e)
+					{
+						NewCreatureDialog dialog = new NewCreatureDialog(shell, "Add Multiple Creatures", 
+								"How many versions of this creature do you wish to add?", null, null);
+						
+						boolean validEntry = false;
+						while (!validEntry)
+						{
+							if (dialog.open() == Window.CANCEL)
+								return;
+							
+							String response = dialog.getCreatureData();
+							int responseNum;
+							
+							if (isValidForNumericField(response) && (responseNum = Integer.parseInt(response)) > 1)
+							{
+								createNewItem(table, responseNum);
+								validEntry = true;
+							}
+							else
+							{
+								MessageBox invalidNumberBox = new MessageBox(shell, SWT.OK);
+								invalidNumberBox.setText("Invalid number");
+								invalidNumberBox.setMessage("Field must contain a numerical value of 2 or greater.");
+								invalidNumberBox.open();
+							}
+						}
+					}
+				});
+	}
+	
+	private void createRemoveButton(Table table, int numGridCols)
+	{
+		GridData buttonData = new GridData();
+		buttonData.horizontalAlignment = GridData.FILL;
+		buttonData.horizontalSpan = numGridCols / 8;
+		buttonData.widthHint = 200;
+		
+		Button removeButton = new Button(shell, SWT.NONE);
+		removeButton.setText("Remove Checked Creatures");
+		removeButton.setToolTipText("Remove selected creatures from the table");
+		removeButton.setLayoutData(buttonData);
+		
+		removeButton.addListener(SWT.Selection, new Listener()
+				{
+					public void handleEvent(Event e)
+					{
+						// get the number of creatures
+						ArrayList<TableItem> itemList = new ArrayList<TableItem>();
+						
+						int numItemsChecked = 0;
+						TableItem item;
+						
+						for (int i = 0; i < table.getItemCount(); i++)
+						{
+							item = table.getItem(i);
+							if (item.getChecked())
+							{
+								numItemsChecked++;
+								itemList.add(item);
+							}
+						}
+						
+						if (numItemsChecked == 0)
+							return;
+						
+
+						// list off all creatures in the "are you sure" menu
+						String message = "Are you sure you wish to remove the following " + numItemsChecked + " creatures?";
+						int numCreaturesToList = (numItemsChecked > 10) ? 10 : numItemsChecked;
+						TableItem checkedItem;
+						
+						for (int i = 0; i < numCreaturesToList; i++)
+						{
+							checkedItem = itemList.get(i);
+							message += "\n" + checkedItem.getText(0);
+						}
+						
+						if (numItemsChecked > numCreaturesToList)
+							message += "\n(... and " + (numItemsChecked - numCreaturesToList) + " others)";
+						
+						MessageBox confMessageBox = new MessageBox(shell, SWT.ICON_WARNING | SWT.YES | SWT.NO);
+						confMessageBox.setText("Remove Creature");
+						confMessageBox.setMessage(message);
+						
+						
+						// remove selected creatures if user presses yes
+						if (confMessageBox.open() == SWT.YES)
+						{
+							for (int i = 0; i < table.getItemCount(); i++)
+							{
+								item = table.getItem(i);
+								
+								if (item.getChecked())
+								{
+									table.remove(i--);
+								}
+							}
+						}
+					}
+				});
+	}
+	
+	private void createSortButton(Table table, int numGridCols)
+	{
+		GridData buttonData = new GridData();
+		buttonData.horizontalAlignment = GridData.FILL;
+		buttonData.verticalAlignment = GridData.BEGINNING;
+		buttonData.horizontalSpan = numGridCols / 8;
+		buttonData.widthHint = 200;
+		
+		Button sortButton = new Button(shell, SWT.NONE);
+		sortButton.setText("Sort");
+		sortButton.setToolTipText("Sort creatures by initiative and initiative modifier");
+		sortButton.setLayoutData(buttonData);
+		
+		sortButton.addListener(SWT.Selection, new Listener()
+				{
+
+					@Override
+					public void handleEvent(Event e)
+					{
+						sortTableByInitColumn(table);
+					}
+					
+				});
+	}
+	
+	private void createRollButton(Table table, int numGridCols)
+	{
+		GridData buttonData = new GridData();
+		buttonData.horizontalAlignment = GridData.FILL;
+		buttonData.verticalAlignment = GridData.END;
+		buttonData.horizontalSpan = numGridCols / 8;
+		
+		Button rollButton = new Button(shell, SWT.NONE);
+		rollButton.setText("Roll Initiative!"); 
+		rollButton.setToolTipText("Roll Initiative for all \"checked\" creatures");
+		rollButton.setLayoutData(buttonData);
+		
+		rollButton.addListener(SWT.Selection, new Listener()
+				{
+					public void handleEvent(Event e)
+					{
+						rollInitiativeForCheckedCreatures(table);
+					}
+				});
+	}
+	
+	// Creates and adds listeners for all buttons in the shell.
+	private void createButtons(Table table, int numGridCols)
+	{
+		createUpButton(table, numGridCols);
+		
+		createAddButton(table, numGridCols);
+		createAddMultButton(table, numGridCols);
+		createRemoveButton(table, numGridCols);
+		createSortButton(table, numGridCols);
+		
+		createDownButton(table, numGridCols);
+		
+		fillEmptySpace(3, false, false);
+		
+		createRollButton(table, numGridCols);
+	}
+	
+	// Roll initiative for all creatures that the user checked
+	// Generates a number between 1 and 20 and then adds the creature's initiative modifier
+	private void rollInitiativeForCheckedCreatures(Table table)
+	{
+		for (TableItem item : table.getItems())
+		{
+			if (item.getChecked())
+			{
+				item.setText(1, "" + ((int)(Math.random() * 20) + 1 + Integer.parseInt(item.getText(2))));
+				System.out.println(Integer.parseInt(item.getText(2)));
+			}
+		}
 	}
 }
 
